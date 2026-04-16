@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Olist Data Insights - AI Assistant</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Markdown Parser (marked.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-circle">
+                    <i class="ph ph-database"></i>
+                </div>
+                <h2>Olist Data Insights</h2>
+            </div>
+            
+            <div class="sidebar-content">
+                <div class="info-card">
+                    <h3><i class="ph ph-info"></i> About System</h3>
+                    <p>Natural-language Business Intelligence queries over the Brazilian Olist E-Commerce dataset.</p>
+                </div>
+                
+                <h3 class="section-title">Suggested Queries</h3>
+                <ul class="suggestion-list">
+                    <li onclick="useSuggestion(this)">Berapa total revenue dari seluruh pesanan?</li>
+                    <li onclick="useSuggestion(this)">Top 5 kategori produk yang paling banyak dibeli?</li>
+                    <li onclick="useSuggestion(this)">Kota mana yang memiliki customer terbanyak?</li>
+                    <li onclick="useSuggestion(this)">Berapa rata-rata harga produk di kategori 'sports_leisure'?</li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-footer">
+                <p>Powered by <strong>Gemini AI</strong> &amp; <strong>LangChain</strong></p>
+                <div class="status-indicator">
+                    <span class="pulse"></span> System Online
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container">
+            <header class="chat-header">
+                <div class="header-title">
+                    <h1>Data Assistant</h1>
+                    <p>Ask anything about your e-commerce data</p>
+                </div>
+                <div class="header-actions">
+                    <button id="clearBtn" title="Clear Chat" class="icon-btn">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="chat-messages" id="chatMessages">
+                <!-- Initial Bot Message -->
+                <div class="message bot">
+                    <div class="avatar"><i class="ph ph-robot"></i></div>
+                    <div class="content">
+                        <p>Halo! Saya adalah AI Data Analyst Anda. Anda bisa menanyakan langsung seputar data penjualan, produk, dan pelanggan dari database Olist E-Commerce. Apa yang ingin Anda ketahui hari ini?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-wrapper">
+                <form id="chatForm" class="chat-form">
+                    <input type="text" id="userInput" placeholder="Ketik pertanyaan Anda tentang data..." autocomplete="off" required>
+                    <button type="submit" id="sendBtn">
+                        <i class="ph ph-paper-plane-right"></i>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

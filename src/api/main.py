@@ -2,6 +2,8 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from loguru import logger
 
 from src.db.connection import check_connection
@@ -22,9 +24,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Root ───────────────────────────────────────────────────────────────
-@app.get("/", tags=["system"])
-def root():
+import os
+
+# Mount static files folder
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# ── Front-End UI ───────────────────────────────────────────────────────
+@app.get("/", tags=["ui"], response_class=FileResponse)
+def serve_ui():
+    """Serve the main Chat Assistant UI."""
+    return os.path.join(STATIC_DIR, "index.html")
+
+# ── System Info Endpoint ───────────────────────────────────────────────
+@app.get("/api/info", tags=["system"])
+def system_info():
+    """Return JSON metadata about the API."""
     return {
         "title": app.title,
         "version": app.version,
