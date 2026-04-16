@@ -1,0 +1,43 @@
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: textsql-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-textsql}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textsql_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-olist}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d   # auto-run SQL on first start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-textsql} -d ${POSTGRES_DB:-olist}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Text-to-SQL Agent API ────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: textsql-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./src:/app/src
+      - ./datasets:/app/datasets
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
