@@ -1,11 +1,14 @@
-"""LangChain SQL LCEL Chain – Token-efficient pipeline."""
+"""LangChain SQL LCEL Chain - Token-efficient pipeline (hardened)."""
 
 import time
-import os
 from loguru import logger
 
 from langchain_community.utilities import SQLDatabase
-from langchain_google_genai import ChatGoogleGenerativeAI, HarmCategory, HarmBlockThreshold
+from langchain_google_genai import (
+    ChatGoogleGenerativeAI,
+    HarmCategory,
+    HarmBlockThreshold,
+)
 from langchain.chains import create_sql_query_chain
 from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
 from langchain_core.prompts import PromptTemplate
@@ -13,6 +16,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from src.config import get_settings
 from src.agent.prompts import SYSTEM_PROMPT
+from src.agent.sql_guard import sanitize_sql, UnsafeSQLError
 
 settings = get_settings()
 
@@ -22,18 +26,19 @@ _execute_query_tool = None
 _sql_query_chain = None
 _answer_chain = None
 
+
 def _init_components():
     global _db, _llm, _execute_query_tool, _sql_query_chain, _answer_chain
     if _db is not None:
         return
 
-    # 1. Database (sample_rows=0 for massive token saving)
+    # 1. Database - pakai koneksi READ-ONLY (bukan kredensial admin)
     _db = SQLDatabase.from_uri(
-        settings.database_url,
-        sample_rows_in_table_info=0, # Crucial for saving tokens!
+        settings.agent_database_url,
+        sample_rows_in_table_info=0,  # hemat token
     )
 
-    # 2. LLM setup (No safety locks)
+    # 2. LLM setup
     model_id = settings.LLM_MODEL
     if not model_id.startswith("models/"):
         model_id = f"models/{model_id}"
@@ -52,74 +57,90 @@ def _init_components():
         safety_settings=safety_settings,
     )
 
-    # 3. Tool to execute SQL Native
+    # 3. Tool eksekusi SQL
     _execute_query_tool = QuerySQLDataBaseTool(db=_db)
 
     # 4. Chain: Generate SQL
-    # We pass the custom SYSTEM_PROMPT. create_sql_query_chain knows how to format it.
-    # Note: create_sql_query_chain accepts a custom prompt, or we can just append to the question natively.
-    # Let's keep it simple: it automatically uses db.get_table_info().
     _sql_query_chain = create_sql_query_chain(_llm, _db)
 
-    # 5. Chain: Generate Final Answer
+    # 5. Chain: Generate jawaban natural language
     answer_prompt = PromptTemplate.from_template(
-        "Based on the user's question, the SQL query, and the SQL result, write a natural language response.\n"
+        "Based on the user's question, the SQL query, and the SQL result, "
+        "write a natural language response.\n"
         "Question: {question}\n"
         "SQL Query: {query}\n"
         "SQL Result: {result}\n"
-        "If the result is empty, say so politely. Be direct and formatting numbers clearly.\n"
+        "If the result is empty, say so politely. Be direct and format numbers clearly.\n"
         "Answer: "
     )
     _answer_chain = answer_prompt | _llm | StrOutputParser()
 
 
 def ask(question: str, max_retries: int = 3) -> dict:
-    """Run LCEL Pipeline: Generate SQL -> Run DB -> Formulate Answer."""
+    """Run LCEL Pipeline: Generate SQL -> Guard -> Run DB -> Formulate Answer."""
     _init_components()
 
     for attempt in range(1, max_retries + 1):
         try:
             # 1. Generate SQL (Call 1)
-            # Injecting SYSTEM PROMPT context directly into the question for better directions since LCEL native prompt is generic
             enhanced_question = f"{SYSTEM_PROMPT}\n\nQuestion: {question}"
             generated_sql = _sql_query_chain.invoke({"question": enhanced_question})
-            
-            # Clean up SQL block markers if Gemini outputs markdown ```sql ... ```
-            clean_sql = generated_sql.replace("```sql", "").replace("```", "").strip()
 
-            # 2. Execute SQL Locally (No LLM Token cost)
-            # Handle invalid SQL blocks returned by LLM
+            # Bersihkan markdown block dan prefix LCEL
+            clean_sql = generated_sql.replace("```sql", "").replace("```", "").strip()
             if clean_sql.startswith("SQLQuery:"):
                 clean_sql = clean_sql.replace("SQLQuery:", "").strip()
-            
-            raw_data = _execute_query_tool.invoke(clean_sql)
 
-            # 3. Generate Human Answer (Call 2)
-            final_answer = _answer_chain.invoke({
-                "question": question,
-                "query": clean_sql,
-                "result": raw_data
-            })
+            # 2. GUARD: tolak non-SELECT, blokir stacked query, paksa LIMIT
+            try:
+                safe_sql = sanitize_sql(clean_sql, dialect="postgres")
+            except UnsafeSQLError as guard_err:
+                logger.warning(f"Blocked unsafe SQL: {guard_err} | sql={clean_sql!r}")
+                return {
+                    "error": "Query ditolak oleh guard keamanan (hanya SELECT diizinkan).",
+                    "detail": str(guard_err),
+                    "sql_query": clean_sql,
+                }
+
+            # 3. Eksekusi SQL yang sudah aman
+            raw_data = _execute_query_tool.invoke(safe_sql)
+
+            # 4. Generate jawaban (Call 2)
+            final_answer = _answer_chain.invoke(
+                {
+                    "question": question,
+                    "query": safe_sql,
+                    "result": raw_data,
+                }
+            )
 
             return {
                 "question": question,
                 "answer": final_answer,
-                "sql_query": clean_sql,
-                "raw_data": str(raw_data) if raw_data else None
+                "sql_query": safe_sql,
+                "raw_data": str(raw_data) if raw_data else None,
             }
 
         except Exception as e:
             error_str = str(e)
             logger.error(f"LCEL Attempt {attempt} failed: {error_str[:300]}")
 
-            if any(err in error_str for err in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]):
+            if any(
+                err in error_str
+                for err in ["429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"]
+            ):
                 is_overload = "503" in error_str or "UNAVAILABLE" in error_str
                 wait_time = (5 * attempt) if is_overload else (15 * attempt)
-                logger.warning(f"API busy/limited (attempt {attempt}). Waiting {wait_time}s...")
+                logger.warning(
+                    f"API busy/limited (attempt {attempt}). Waiting {wait_time}s..."
+                )
                 time.sleep(wait_time)
             elif "SQL" in error_str:
-                 # SQL syntax error, we just raise it for now as LCEL is not self-correcting by default
-                 return {"error": "Invalid SQL generated by AI", "detail": error_str, "sql_query": locals().get("clean_sql")}
+                return {
+                    "error": "Invalid SQL generated by AI",
+                    "detail": error_str,
+                    "sql_query": locals().get("safe_sql") or locals().get("clean_sql"),
+                }
             else:
                 raise e
 

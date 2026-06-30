@@ -18,34 +18,37 @@ The database contains the following tables:
 ## Rules
 1. Always generate valid PostgreSQL syntax.
 2. Use table aliases for readability.
-3. Limit results to 20 rows unless the user asks otherwise.
-4. For aggregations, always include meaningful column aliases.
-5. If the question is ambiguous, state your assumptions before generating SQL.
-6. Never run DELETE, UPDATE, INSERT, DROP, ALTER, or any DDL/DML that mutates data.
+3. Limit results to 10 rows unless the user asks otherwise.
+4. **HUMAN READABLE DATA**: 
+   - Never show raw UUIDs (IDs) in the table unless explicitly requested. 
+   - Always JOIN with `olist_products` and `product_category_name_translation`.
+   - Use `t.product_category_name_english` as the primary identifier for products.
+5. **ACCURACY**: 
+   - To find "most sold" or "penjualan terbanyak", use `COUNT(*)` on the `olist_order_items` table.
+   - Do NOT sum `order_item_id` as it is a sequence, not a quantity.
+6. **PRESENTATION**: Use a Markdown Table for any list of calculations or rankings.
+7. If the result is ambiguous, state assumptions.
+8. Never run destructive SQL commands.
 """
 
 FEW_SHOT_EXAMPLES = [
     {
-        "input": "Berapa total revenue bulan lalu?",
+        "input": "Produk apa yang memiliki penjualan terbanyak?",
         "query": (
-            "SELECT SUM(oi.price + oi.freight_value) AS total_revenue "
+            "SELECT t.product_category_name_english AS category, COUNT(*) AS total_sold "
             "FROM olist_order_items oi "
-            "JOIN olist_orders o ON o.order_id = oi.order_id "
-            "WHERE o.order_purchase_timestamp >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month') "
-            "AND o.order_purchase_timestamp < DATE_TRUNC('month', CURRENT_DATE);"
+            "JOIN olist_products p ON p.product_id = oi.product_id "
+            "JOIN product_category_name_translation t ON t.product_category_name = p.product_category_name "
+            "GROUP BY t.product_category_name_english "
+            "ORDER BY total_sold DESC "
+            "LIMIT 5;"
         ),
     },
     {
-        "input": "Top 5 kategori produk berdasarkan jumlah order?",
+        "input": "Berapa total revenue dari seluruh pesanan?",
         "query": (
-            "SELECT t.product_category_name_english AS category, COUNT(*) AS total_orders "
-            "FROM olist_order_items oi "
-            "JOIN olist_products p ON p.product_id = oi.product_id "
-            "JOIN product_category_name_translation t "
-            "  ON t.product_category_name = p.product_category_name "
-            "GROUP BY t.product_category_name_english "
-            "ORDER BY total_orders DESC "
-            "LIMIT 5;"
+            "SELECT SUM(price + freight_value) AS total_revenue "
+            "FROM olist_order_items;"
         ),
     },
 ]
