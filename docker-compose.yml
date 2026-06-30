@@ -1,4 +1,3 @@
-
 services:
   # ── PostgreSQL Database ──────────────────────────────────────────────
   postgres:
@@ -9,13 +8,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-textsql}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textsql_secret}
       POSTGRES_DB: ${POSTGRES_DB:-olist}
+      DB_READONLY_USER: ${DB_READONLY_USER:-llm_readonly}
+      DB_READONLY_PASSWORD: ${DB_READONLY_PASSWORD:?set DB_READONLY_PASSWORD di .env}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d   # auto-run SQL on first start
+      - ./db/init:/docker-entrypoint-initdb.d # auto-run SQL on first start
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-textsql} -d ${POSTGRES_DB:-olist}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-textsql} -d ${POSTGRES_DB:-olist}" ]
       interval: 10s
       timeout: 5s
       retries: 5

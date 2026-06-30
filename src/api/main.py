@@ -6,7 +6,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.concurrency import run_in_threadpool 
 from loguru import logger
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.db.connection import check_connection
@@ -74,30 +76,23 @@ def health():
 # Query Endpoint
 @app.post("/query", tags=["agent"])
 async def query(payload: QueryRequest):
-    """Terima pertanyaan natural language, balas jawaban AI.
-
-    Request body:
-        {"question": "Top 5 kota dengan customer terbanyak?"}
-    """
+    """Terima pertanyaan natural language, balas jawaban AI."""
     question = payload.question
     logger.info(f"Received question: {question}")
 
     try:
-        result = ask(question)
+        # ask() sinkron & blocking → jalankan di worker thread,
+        # event loop tetap bebas melayani request lain.
+        result = await run_in_threadpool(ask, question)
     except Exception as e:
-        logger.error(f"Agent crashed: {str(e)}")
-        from fastapi.responses import JSONResponse
+        logger.error(f"Agent crashed: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": "Agent failed to process the request", "detail": str(e)},
         )
 
-    # ask() bisa balikin dict error (guard block / SQL invalid) tanpa 'answer'
     if isinstance(result, dict) and "error" in result:
-        logger.warning(
-            f"Query rejected: {result.get('error')} | {result.get('detail')}"
-        )
-        from fastapi.responses import JSONResponse
+        logger.warning(f"Query rejected: {result.get('error')} | {result.get('detail')}")
         return JSONResponse(status_code=400, content=result)
 
     return result
