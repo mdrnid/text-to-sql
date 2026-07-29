@@ -1,0 +1,28 @@
+# Pasangan pertanyaan → SQL benar. Metrik = execution accuracy
+# (bandingkan result set, bukan string SQL).
+- id: top_states
+  question: "5 negara bagian dengan jumlah customer terbanyak?"
+  gold_sql: >
+    SELECT customer_state, COUNT(*) AS n
+    FROM olist_customers
+    GROUP BY customer_state
+    ORDER BY n DESC
+    LIMIT 5;
+
+- id: total_revenue
+  question: "Berapa total revenue dari seluruh order item?"
+  gold_sql: >
+    SELECT SUM(price + freight_value) AS total_revenue
+    FROM olist_order_items;
+
+- id: top_category
+  question: "Kategori produk apa yang paling banyak terjual?"
+  gold_sql: >
+    SELECT t.product_category_name_english AS category, COUNT(*) AS total_sold
+    FROM olist_order_items oi
+    JOIN olist_products p ON p.product_id = oi.product_id
+    JOIN product_category_name_translation t
+      ON t.product_category_name = p.product_category_name
+    GROUP BY t.product_category_name_english
+    ORDER BY total_sold DESC
+    LIMIT 5;

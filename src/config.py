@@ -6,22 +6,6 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     """Central configuration loaded from environment / .env file."""
-
-    # LLM (Google Gemini)
-    GOOGLE_API_KEY: str = ""
-    LLM_MODEL: str = "gemini-2.5-flash"
-
-    # Database (admin / migrasi / load_data)
-    POSTGRES_USER: str = "textsql"
-    POSTGRES_PASSWORD: str = "textsql_secret"
-    POSTGRES_HOST: str = "postgres"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = "olist"
-
-    # Database (read-only role khusus LLM agent)
-    DB_READONLY_USER: str = "llm_readonly"
-    DB_READONLY_PASSWORD: str = "change_me_readonly"
-
     @property
     def database_url(self) -> str:
         """Koneksi admin. Dipakai migrasi, load_data, dan /health."""

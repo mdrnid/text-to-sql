@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# Default: HANYA lane unit yang jalan (cepat, deterministik, no external deps).
+addopts = "-ra -q -m 'not integration and not eval' --cov=src --cov-report=term-missing --cov-fail-under=70"
+markers = [
+    "integration: butuh Docker/Postgres asli (testcontainers)",
+    "eval: butuh GOOGLE_API_KEY + DB terisi (akurasi text-to-SQL, non-deterministik)",
+]
+
+[tool.coverage.run]
+omit = ["src/frontend/*", "tests/*"]
